@@ -15,14 +15,26 @@
 #include "../interface/Track.h"
 
 
+struct GenPart_t {
+  double c;
+  double pt;
+  double d0;
+  double phi;
+  double eta;
+  double z0;
+};
+
+struct GenPart_compare {
+  bool operator() (const GenPart_t &a, const GenPart_t &b) const {
+    return a.c < b.c;
+  }
+};
+
+
 // --- Function paradigms:
 void rotateHits(vector<Hit_t*> hits, double angle);
 void confTrans(vector<Hit_t*> hits);
 void retina_initialize(std::map <const char*,double> *config);
-
-
-// --- Global variables:
-const double mMagneticField = 3.8;
 
 
 // --- Retina configuration parameters:
@@ -37,17 +49,40 @@ const double rot_angle[8] = {  0.39269908169872414,   //  pi/8
 			      -4.31968989868596509,   // -11/8 pi
 			      -5.10508806208341426 }; // -13/8 pi
 
+const double mMagneticField = 3.8;
 
-// --- Histograms:
-TH1F * h_Nstubs_tot;  
-TH1F * h_Nstubs_tot_PR;  
-TH1F * h_Nstubs_road;  
-TH1F * h_Nstubs_layer;  
-TH1F * h_Nstubs_trigT;  
+
+// --- Histogram booking:
+
+TH1F * h_Nstubs_tot    = new TH1F("h_Nstubs_tot","Total stubs per event",1000,0,20000);
+TH1F * h_Nstubs_tot_PR = new TH1F("h_Nstubs_tot_PR","Total stubs per event after PR",1000,0,20000);
+TH1F * h_Nstubs_road   = new TH1F("h_Nstubs_trigT","Total stubs per trigger tower",400,0,400);
+TH1F * h_Nstubs_layer  = new TH1F("h_Nstubs_road","Total stubs per road",30,0,30);
+TH1F * h_Nstubs_trigT  = new TH1F("h_Nstubs_layer","Different layers per road",30,0,30);
 TH2F * h_max_XY1[3];  
 TH2F * h_max_XY2[3];  
 TH2F * h_max_RZ1[3];  
 TH2F * h_max_RZ2[3];  
+
+TH1F * h_Ntrks   = new TH1F("h_Ntrks","Number of fitted track",500,0,500);  
+TH1F * h_trk_c   = new TH1F("h_trk_c","track c;c^{trk} [cm^{-1}]", 150, -0.0076, 0.0076);
+TH1F * h_trk_pt  = new TH1F("h_trk_pt","track p_{T};p_{T}^{trk} [GeV/c]", 150, 0.,150.);
+TH1F * h_trk_phi = new TH1F("h_trk_phi","track #phi;#phi^{trk} [rad]", 100, -TMath::Pi(), TMath::Pi());
+TH1F * h_trk_eta = new TH1F("h_trk_eta","track #eta;#eta^{trk}", 100,-3.,3.);
+TH1F * h_trk_z0  = new TH1F("h_trk_z0","track z_{0};z_{0}^{trk} [cm]", 100,-25.,25.);
+
+TH1F * h_gen_pdg   = new TH1F("h_gen_pdg","gen pdg ID;pdg ID", 1000, -500, 500.);
+TH1F * h_gen_pt    = new TH1F("h_gen_pt","gen p_{T};p_{T}^{gen} [GeV/c]", 100, 0.,100.);
+TH1F * h_gen_d0    = new TH1F("h_gen_d0","gen d_{0};d_{0}^{gen} [cm]", 100,-0.05,0.05);
+TH1F * h_gen_phi   = new TH1F("h_gen_phi","gen #phi;#phi^{gen} [rad]", 100,-TMath::Pi(),TMath::Pi());
+TH1F * h_gen_eta   = new TH1F("h_gen_eta","gen #eta;#eta^{gen}", 100,-4.,4.);
+TH1F * h_gen_theta = new TH1F("h_gen_theta","gen #theta;#theta^{gen}", 100,0.,TMath::Pi());
+TH1F * h_gen_z0    = new TH1F("h_gen_z0","gen z_{0};z_{0}^{gen} [cm]", 100, -20.,20.);
+
+TH1F * h_res_pt_rel = new TH1F("h_res_pt_rel","p_{T} resolution;(p_{T}^{fit}-p_{T}^{gen})/p_{T}^{gen}", 100,-1.,1.);
+TH1F * h_res_phi    = new TH1F("h_res_phi","#phi resolution;#phi^{fit}-#phi^{gen} [rad]", 100,-0.05,0.05);
+TH1F * h_res_eta    = new TH1F("h_res_eta","#eta resolution;#eta^{fit}-#eta^{gen}", 100,-0.05,0.05);
+TH1F * h_res_z0     = new TH1F("h_res_z0","z_{0} resolution;z_{0}^{fit}-z_{0}^{gen} [cm]", 100,-2.,2.);
 
 
 int main(int argc, char* argv[]) {
@@ -60,7 +95,7 @@ int main(int argc, char* argv[]) {
   long long int n_events = 1;
   bool fit_roads = false;
   string input_file = "";
-  int verboseLevel = 0;
+  int verboseLevel = 1;
 
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i],"--fit-roads")) {
@@ -78,35 +113,32 @@ int main(int argc, char* argv[]) {
     }
     if (!strcmp(argv[i],"-h")) {
       cout << "-h \t print this help and exit" << endl 
-	   << "-v \t verbosity level \t\t default = 0" << endl
-	   << "-n # \t set number of events \t\t\t default = 1" << endl 
-	   << "-f <filename> \t a root file or a text file containing a list of root files: \t default = \"\"" 
+	   << "-n # \t set number of events (default = 1)" << endl 
+	   << "-f <filename> \t a root file or a text file containing a list of root files (default = \"\")" 
 	   << endl
-	   << "--fit-roads \t fit per road: \t default = false" << endl;
+	   << "--fit-roads \t fit per road (default = false)" << endl
+	   << "-v # \t verbosity level (default = 1):" << endl
+	   << "         0: no printouts" << endl
+	   << "         1: print the fitted tracks and the matched gen particles" << endl
+	   << "         2: print all the MC gen particles" << endl
+	   << "         3: print the stub coordinates and the Retina maxima" << endl
+	   << "         4: dump the Retina into a file" << endl
+	   << "         5: switch on the fit diagnostics" << endl;
       return EXIT_SUCCESS;
     }
   }
 
 
-  // =============================================================================================
-  //  Book the histograms:
-  // =============================================================================================
-
-  h_Nstubs_tot    = new TH1F("h_Nstubs_tot","Total stubs per event",1000,0,20000);  
-  h_Nstubs_tot_PR = new TH1F("h_Nstubs_tot_PR","Total stubs per event after PR",1000,0,20000);  
-  h_Nstubs_trigT  = new TH1F("h_Nstubs_trigT","Total stubs per trigger tower",400,0,400);  
-  h_Nstubs_road   = new TH1F("h_Nstubs_road","Total stubs per road",30,0,30);  
-  h_Nstubs_layer  = new TH1F("h_Nstubs_layer","Different layers per road",30,0,30);  
-
+  // --- Book the histogram arrays:
   for (int ihist=0; ihist<3; ++ihist){
     TString hname = Form("h_max_XY1_%d",ihist);
-    h_max_XY1[ihist] = new TH2F(hname.Data(),"XY-1 maxima",100,-0.05,0.05,100,-0.05,0.05);
+    h_max_XY1[ihist] = new TH2F(hname.Data(),"XY-1 maxima;x_{-};x_{+}",100,-0.05,0.05,100,-0.05,0.05);
     hname = Form("h_max_XY2_%d",ihist);
-    h_max_XY2[ihist] = new TH2F(hname.Data(),"XY-2 maxima",100,-0.05,0.05,100,-0.05,0.05);
+    h_max_XY2[ihist] = new TH2F(hname.Data(),"XY-2 maxima;x_{-};x_{+}",100,-0.05,0.05,100,-0.05,0.05);
     hname = Form("h_max_RZ1_%d",ihist);
-    h_max_RZ1[ihist] = new TH2F(hname.Data(),"RZ-1 maxima",100,-20.,240.,100,-60.,180);
+    h_max_RZ1[ihist] = new TH2F(hname.Data(),"RZ-1 maxima;x_{-};x_{+}",100,-20.,240.,100,-60.,180);
     hname = Form("h_max_RZ2_%d",ihist);
-    h_max_RZ2[ihist] = new TH2F(hname.Data(),"RZ-2 maxima",100,-20.,240.,100,-60.,180);
+    h_max_RZ2[ihist] = new TH2F(hname.Data(),"RZ-2 maxima;x_{-};x_{+}",100,-20.,240.,100,-60.,180);
   }
 
   // =============================================================================================
@@ -153,6 +185,16 @@ int main(int argc, char* argv[]) {
   std::vector<float>   *gen_vx  = NULL;
   std::vector<float>   *gen_vy  = NULL;
   std::vector<float>   *gen_vz  = NULL;
+  int n_pu = 0; 
+  std::vector<int>     *pu_pdg  = NULL;
+  std::vector<float>   *pu_px   = NULL;
+  std::vector<float>   *pu_py   = NULL;
+  std::vector<float>   *pu_pz   = NULL;
+  std::vector<float>   *pu_eta  = NULL;
+  std::vector<float>   *pu_phi  = NULL;
+  std::vector<float>   *pu_vx   = NULL;
+  std::vector<float>   *pu_vy   = NULL;
+  std::vector<float>   *pu_vz   = NULL;
 
   m_MC->SetBranchAddress("gen_n",   &n_gen);
   m_MC->SetBranchAddress("gen_pdg", &gen_pdg);
@@ -162,6 +204,16 @@ int main(int argc, char* argv[]) {
   m_MC->SetBranchAddress("gen_x",   &gen_vx);
   m_MC->SetBranchAddress("gen_y",   &gen_vy);
   m_MC->SetBranchAddress("gen_z",   &gen_vz);
+  m_MC->SetBranchAddress("subpart_n",     &n_pu);
+  m_MC->SetBranchAddress("subpart_pdgId", &pu_pdg);
+  m_MC->SetBranchAddress("subpart_px",    &pu_px);
+  m_MC->SetBranchAddress("subpart_py",    &pu_py);
+  m_MC->SetBranchAddress("subpart_pz",    &pu_pz);
+  m_MC->SetBranchAddress("subpart_eta",   &pu_eta);
+  m_MC->SetBranchAddress("subpart_phi",   &pu_phi);
+  m_MC->SetBranchAddress("subpart_x",     &pu_vx);
+  m_MC->SetBranchAddress("subpart_y",     &pu_vy);
+  m_MC->SetBranchAddress("subpart_z",     &pu_vz);
 
 
   int eventId = -1;
@@ -209,11 +261,19 @@ int main(int argc, char* argv[]) {
     
     int event_counter = ientry;
 
+    if ( ientry % 1000 == 0 )
+      cout << "*** Processing event " << ientry << "/" << n_events << endl;
+
+    if ( verboseLevel > 0 )
+      std::cout << "Event = " <<  ientry 
+		<< " ----------------------------------------------------------------------" 
+		<< std::endl;
+
     m_L1TT->GetEntry(ientry);
     m_PATT->GetEntry(ientry);
     m_MC->GetEntry(ientry);
 
-   
+
     // --- Get the stubs per road and trigger tower:
     map <int, set<int> > road_stubs;
     map <int, set<int> > road_stubs_layer;
@@ -261,6 +321,7 @@ int main(int argc, char* argv[]) {
 
     for (istub = istub_begin; istub != istub_end; ++istub){
 
+
       int road_id = istub->first; // NB: When fitting per trigger tower, this is the tower id.
 
       // Constants used in X+-X- transformation:
@@ -298,7 +359,7 @@ int main(int argc, char* argv[]) {
      
      	hits.push_back(hit);
      	
-	if (verboseLevel==2 )
+	if (verboseLevel==3 )
 	  cout << std::distance((istub->second).begin(),ihit) << "  -  " 
 	       << " x = " << hit->x << "   "
 	       << " y = " << hit->y << "   "
@@ -365,26 +426,27 @@ int main(int argc, char* argv[]) {
       // --- Fill the retina and find maxima:
       retinaXY_step1.fillGrid();
       retinaXY_step1.findMaxima();
-      if ( verboseLevel==1 )
+      if ( verboseLevel==4 )
 	retinaXY_step1.dumpGrid(event_counter,1,road_id);
-      if ( verboseLevel==2 )
+      if ( verboseLevel==3 )
 	retinaXY_step1.printMaxima();
 
 
       // --- Get first step maxima:
       vector <pqPoint> maximaXY_step1 = retinaXY_step1.getMaxima();
 
-      if ( maximaXY_step1.size()==0 && verboseLevel>0 ){
+      if ( maximaXY_step1.size()==0 && verboseLevel==5 ){
 	cout << "*** WARNING in RetinaTrackFitter::fit() at event/road = " << event_counter << "/" 
 	     << road_id << ": no maximum found in XY fit-step 1." << endl;
 	retinaXY_step1.dumpGrid(event_counter,1,0);
       }
 
       if ( maximaXY_step1.size() > 10 ){
-	cout << "*** ERROR in RetinaTrackFitter::fit() at event/road = " << event_counter 
-	     << "/" << road_id << ": " << maximaXY_step1.size() 
-	     << " maxima found in XY fit-step 1, fit aborted!" << endl;
 	if ( verboseLevel>0 ) 
+	  cout << "*** ERROR in RetinaTrackFitter::fit() at event/road = " << event_counter 
+	       << "/" << road_id << ": " << maximaXY_step1.size() 
+	       << " maxima found in XY fit-step 1, fit aborted!" << endl;
+	if ( verboseLevel==5 ) 
 	  retinaXY_step1.dumpGrid(event_counter,1,0);
 	continue;
       }
@@ -441,16 +503,16 @@ int main(int argc, char* argv[]) {
 	// --- Fill the retina and find maxima:
 	retinaXY_step2.fillGrid();
 	retinaXY_step2.findMaxima();
-	if ( verboseLevel==1 )
+	if ( verboseLevel==4 )
 	  retinaXY_step2.dumpGrid(event_counter,2,road_id*100+imax);
-	if ( verboseLevel==2 )
+	if ( verboseLevel==3 )
 	  retinaXY_step2.printMaxima();
 
 
 	// --- Get second step maxima:
 	vector <pqPoint> maximaXY_step2 = retinaXY_step2.getMaxima();
 
-	if ( maximaXY_step2.size()==0 && verboseLevel>0 ){
+	if ( maximaXY_step2.size()==0 && verboseLevel==5 ){
 	  cout << "*** WARNING in RetinaTrackFitter::fit() at event/road = " << event_counter << "/" 
 	       << road_id << ": no maximum found in XY fit-step 2 (step-1 XY maximum #" << imax << ")." 
 	       << endl;
@@ -458,11 +520,12 @@ int main(int argc, char* argv[]) {
 	}
 
 	if ( maximaXY_step2.size() > 10 ){
-	  cout << "*** ERROR in RetinaTrackFitter::fit() at event/road = " << event_counter 
-	       << "/" << road_id << ": " << maximaXY_step2.size() 
-	       << " maxima found in XY fit-step 2 (step-1 XY maximum #" << imax << "), fit aborted!" 
-	       << endl;
 	  if ( verboseLevel>0 ) 
+	    cout << "*** ERROR in RetinaTrackFitter::fit() at event/road = " << event_counter 
+		 << "/" << road_id << ": " << maximaXY_step2.size() 
+		 << " maxima found in XY fit-step 2 (step-1 XY maximum #" << imax << "), fit aborted!" 
+		 << endl;
+	  if ( verboseLevel==5 ) 
 	    retinaXY_step2.dumpGrid(event_counter,2,imax);
 	  continue;
 	}
@@ -493,13 +556,13 @@ int main(int argc, char* argv[]) {
 		n_stubsPS++;
 	    }
 	    else
-	      if ( verboseLevel>0 )
+	      if ( verboseLevel==5 )
 		cout << "*** WARNING in RetinaTrackFitter::fit() at event/road = " << event_counter 
 		     << "/" << road_id << ": stub " << hits[ihit]->id << " with weight = " << weight 
 		     << " has not been associated to the XY step-2 maximum #" << imax << "." << endl;
 	  } // ihit loop
 	  if ( hits_RZ.size() < 3 ){
-	    if ( verboseLevel>0 )
+	    if ( verboseLevel==5 )
 	      cout << "*** ERROR in RetinaTrackFitter::fit() at event/road = " << event_counter 
 		   << "/" << road_id << ": only " <<  hits_RZ.size() 
 		   << " stubs associated to the XY step-2 maximum #" << imax << ", fit aborted!" << endl;
@@ -581,16 +644,16 @@ int main(int argc, char* argv[]) {
 
 	  retinaRZ_step1.fillGrid();
 	  retinaRZ_step1.findMaxima();
-	  if ( verboseLevel==1 )
+	  if ( verboseLevel==4 )
 	    retinaRZ_step1.dumpGrid(event_counter,1,imax);
-	  if ( verboseLevel==2 )
+	  if ( verboseLevel==3 )
 	    retinaRZ_step1.printMaxima();
 
 
 	  // --- Get first step maximum:
 	  vector <pqPoint> maximaRZ_step1 = retinaRZ_step1.getMaxima();
 
-	  if ( maximaRZ_step1.size()==0 && verboseLevel>0 ){
+	  if ( maximaRZ_step1.size()==0 && verboseLevel==5 ){
 	    cout << "*** WARNING in RetinaTrackFitter::fit() at event/road = " << event_counter 
 		 << "/" << road_id << ": no maximum found in RZ fit-step 1 (step-1 maximum #" 
 		 << imax << ")." << endl;
@@ -602,7 +665,7 @@ int main(int argc, char* argv[]) {
 		 << "/" << road_id << ": " << maximaRZ_step1.size() 
 		 << " maxima found in RZ fit-step 1 (step-1 maximum #" << imax << "), fit aborted!" 
 		 << endl;
-	    if ( verboseLevel>0 ) 
+	    if ( verboseLevel==5 ) 
 	      retinaRZ_step1.dumpGrid(event_counter,1,imax);
 	    continue;
 	  }
@@ -663,9 +726,9 @@ int main(int argc, char* argv[]) {
 
 	    retinaRZ_step2.fillGrid();
 	    retinaRZ_step2.findMaxima();
-	    if ( verboseLevel==1 )
+	    if ( verboseLevel==4 )
 	      retinaRZ_step2.dumpGrid(event_counter,2,imax*100+imax_RZ);
-	    if ( verboseLevel==2 )
+	    if ( verboseLevel==3 )
 	      retinaRZ_step2.printMaxima();
 
 	    pqPoint bestpqRZ_step2 = retinaRZ_step2.getBestPQ();
@@ -675,7 +738,7 @@ int main(int argc, char* argv[]) {
 
 	    // --- If no RZ maximum is found, skip the road:
 	    if ( bestpqRZ_step2.w == -1. ) {
-	      if ( verboseLevel>0 )
+	      if ( verboseLevel==5 )
 		cout << "*** ERROR in RetinaTrackFitter::fit() at event/road = " << event_counter 
 		     << "/" << road_id << ": no maximum found in RZ fit-step 2 (step-1 XY maximum #" 
 		     << imax << ", step-1 RZ maximum #" << imax_RZ << "), fit aborted!" << endl;
@@ -683,11 +746,12 @@ int main(int argc, char* argv[]) {
 	    }
 
 	    if ( retinaRZ_step2.getMaxima().size() > 10 ){
-	      cout << "*** ERROR in RetinaTrackFitter::fit() at event/road = " << event_counter 
-		   << "/" << road_id << ": " << retinaRZ_step2.getMaxima().size()
-		   << " maxima found in RZ fit-step 2 (step-1 maximum #" << imax 
-		   << ", step-1 RZ maximum #" << imax_RZ << "), fit aborted!" << endl;
 	      if ( verboseLevel>0 ) 
+		cout << "*** ERROR in RetinaTrackFitter::fit() at event/road = " << event_counter 
+		     << "/" << road_id << ": " << retinaRZ_step2.getMaxima().size()
+		     << " maxima found in RZ fit-step 2 (step-1 maximum #" << imax 
+		     << ", step-1 RZ maximum #" << imax_RZ << "), fit aborted!" << endl;
+	      if ( verboseLevel==5 ) 
 		retinaRZ_step2.dumpGrid(event_counter,2,imax*100+imax_RZ);
 	      continue;
 	    }
@@ -701,7 +765,7 @@ int main(int argc, char* argv[]) {
 	    // --- Get the track parameters:
 	    double theta = atan(p);
 	    if ( theta < 0. ){
-	      if ( verboseLevel>0 ) 
+	      if ( verboseLevel==5 ) 
 		cout << "*** WARNING in RetinaTrackFitter::fit() at event/road = " << event_counter 
 		     << "/" << road_id << ": theta corrected from " << theta << " to " << theta+TMath::Pi() 
 		     << endl;
@@ -719,14 +783,16 @@ int main(int argc, char* argv[]) {
 
 
 	    // --- Save the track:
-	    Track* trk = new Track(c, 0., phi, eta, z0, maximaXY_step2[itrk].w, bestpqRZ_step2.w);
-	    for(unsigned int ihit=0; ihit<hits_RZ.size(); ihit++)
-	      trk->addStubIndex(hits_RZ[ihit]->id);
+	    if ( fabs(c)<0.0076 && fabs(eta)<3.5 && fabs(z0)<25. ) {
+	      Track* trk = new Track(c, 0., phi, eta, z0, maximaXY_step2[itrk].w, bestpqRZ_step2.w);
+	      for(unsigned int ihit=0; ihit<hits_RZ.size(); ihit++)
+		trk->addStubIndex(hits_RZ[ihit]->id);
 
-	    tracks.push_back(trk);
+	      tracks.push_back(trk);
+
+	    }
 
 	  } // imax_RZ loop
-
 
 	  hits_RZ.clear();
 
@@ -745,57 +811,155 @@ int main(int argc, char* argv[]) {
 
 
 
-    if ( verboseLevel == 3 ){
+    // =============================================================================================
+    //  True MC info
+    // =============================================================================================
 
-      std::cout << "Event = " <<  ientry 
-		<< " ----------------------------------------------------------------------" << std::endl;
+    std::map< int, std::set<GenPart_t,GenPart_compare> > matched_gen;
 
-      //  --- Printout the generated particles:
-
+    if ( verboseLevel == 2 )
       std::cout << " Generated particles:" << std::endl;
-      for (int ipart=0; ipart<n_gen; ++ipart) {
+    
+    // --- gen block
+    for (int ipart=0; ipart<n_gen; ++ipart) {
+    
+      // --- Keep only charged stable particles:
+      if ( fabs(gen_pdg->at(ipart)) == 15   ||
+    	   fabs(gen_pdg->at(ipart)) == 12   ||
+    	   fabs(gen_pdg->at(ipart)) == 14   ||
+    	   fabs(gen_pdg->at(ipart)) == 16   ||
+    	   fabs(gen_pdg->at(ipart)) == 22   ||
+    	   fabs(gen_pdg->at(ipart)) == 111  ||
+    	   fabs(gen_pdg->at(ipart)) == 113  ||
+    	   fabs(gen_pdg->at(ipart)) == 130  ||
+    	   fabs(gen_pdg->at(ipart)) == 221  ||
+    	   fabs(gen_pdg->at(ipart)) == 310  ||
+    	   fabs(gen_pdg->at(ipart)) == 331  ||
+    	   fabs(gen_pdg->at(ipart)) == 2112 ||
+    	   fabs(gen_pdg->at(ipart)) > 3000  ) continue;
+    
+      double gen_charge = TMath::Sign(1., (Double_t) gen_pdg->at(ipart));
+    
+      double gen_pt  = sqrt(gen_px->at(ipart)*gen_px->at(ipart)+gen_py->at(ipart)*gen_py->at(ipart));
+      double gen_phi = atan2(gen_py->at(ipart),gen_px->at(ipart));
+      //if (gen_phi<0.)
+      //gen_phi += TMath::TwoPi();
+      double gen_theta = atan2(gen_pt,gen_pz->at(ipart));
+      double gen_eta = -log(tan(0.5*gen_theta));
+    
+      // curvature and helix radius:
+      double c = gen_charge*0.003*mMagneticField/gen_pt;
+      double R = gen_pt/(0.003*mMagneticField);
+    	  
+      // helix center:
+      double x0 = gen_vx->at(ipart) - gen_charge*R*gen_py->at(ipart)/gen_pt;
+      double y0 = gen_vy->at(ipart) + gen_charge*R*gen_px->at(ipart)/gen_pt;
+    
+      // transverse and longitudinal impact parameters:
+      double gen_d0 = gen_charge*(sqrt(x0*x0+y0*y0)-R);
+      double diff = gen_vx->at(ipart)*gen_vx->at(ipart)+gen_vy->at(ipart)*gen_vy->at(ipart)-gen_d0*gen_d0;
+      if ( diff < 0. ) diff = 0.;
+      double gen_z0 = gen_vz->at(ipart) - 2./c*gen_pz->at(ipart)/gen_pt*asin(0.5*c*sqrt(diff));
+    
+      h_gen_pdg   ->Fill(gen_pdg->at(ipart));
+      h_gen_pt    ->Fill(gen_pt);
+      h_gen_d0    ->Fill(gen_d0);
+      h_gen_phi   ->Fill(gen_phi);
+      h_gen_eta   ->Fill(gen_eta);
+      h_gen_theta ->Fill(gen_theta);
+      h_gen_z0    ->Fill(gen_z0);
 
-	// --- Keep only charged stable particles:
-	if ( fabs(gen_pdg->at(ipart)) == 15   ||
-	     fabs(gen_pdg->at(ipart)) == 12   ||
-	     fabs(gen_pdg->at(ipart)) == 14   ||
-	     fabs(gen_pdg->at(ipart)) == 16   ||
-	     fabs(gen_pdg->at(ipart)) == 22   ||
-	     fabs(gen_pdg->at(ipart)) == 111  ||
-	     fabs(gen_pdg->at(ipart)) == 113  ||
-	     fabs(gen_pdg->at(ipart)) == 130  ||
-	     fabs(gen_pdg->at(ipart)) == 221  ||
-	     fabs(gen_pdg->at(ipart)) == 310  ||
-	     fabs(gen_pdg->at(ipart)) == 331  ||
-	     fabs(gen_pdg->at(ipart)) == 2112 ||
-	     fabs(gen_pdg->at(ipart)) > 3000  ) continue;
+      ////   NB: it seeme that the particles in the gen block are duplicated
+      ////       in the subpart block  
+      ////
+      //// --- Print out the generated particles:
+      //if ( verboseLevel == 2 )
+      //	std::cout << "  " << ipart << "  -  ID = " << gen_pdg->at(ipart)
+      //		  << "  pt = "  << gen_pt
+      //		  << "  d0 = "  << gen_d0
+      //		  << "  phi = " << gen_phi
+      //		  << "  eta = " << gen_eta
+      //		  << "  z0 = "  << gen_z0 
+      //		  << std::endl; 
+      //
+      //
+      //// --- Try to match the particle with the fitted tracks
+      //for ( std::vector<Track*>::iterator itrk=tracks.begin(); itrk!=tracks.end(); ++itrk ){
+      //
+      //	double delta_phi =  (*itrk)->getPhi0() - gen_phi;
+      //	if ( fabs(delta_phi)>TMath::Pi() )
+      //	  delta_phi = TMath::TwoPi() - fabs(delta_phi);
+      //	double delta_eta = (*itrk)->getEta0() - gen_eta;
+      //	
+      //	double delta_R = sqrt(delta_phi*delta_phi+delta_eta*delta_eta);
+      //
+      //	if ( delta_R < 0.05 ) {
+      //
+      //	  GenPart_t tmpPart;
+      //	  tmpPart.c   = c;
+      //	  tmpPart.pt  = gen_pt;
+      //	  tmpPart.phi = gen_phi;
+      //	  tmpPart.d0  = gen_d0;
+      //	  tmpPart.eta = gen_eta;
+      //	  tmpPart.z0  = gen_z0;
+      //
+      //	  int index = std::distance(tracks.begin(),itrk);
+      //	  matched_gen[index].insert(tmpPart);
+      //
+      //	}
+      //
+      //}
+    
+    } // ipart loop
 
-	double gen_charge = TMath::Sign(1., (Double_t) gen_pdg->at(ipart));
+    // --- subpart block
+    int nstable = 0;
+    for (int ipart=0; ipart<n_pu; ++ipart) {
 
-	double gen_pt  = sqrt(gen_px->at(ipart)*gen_px->at(ipart)+gen_py->at(ipart)*gen_py->at(ipart));
-	double gen_phi = atan2(gen_py->at(ipart),gen_px->at(ipart));
-	//if (gen_phi<0.)
-	//gen_phi += TMath::TwoPi();
-	double gen_theta = atan2(gen_pt,gen_pz->at(ipart));
-	double gen_eta = -log(tan(0.5*gen_theta));
+      // --- Keep only charged stable particles:
+      if ( fabs(pu_pdg->at(ipart)) == 15   ||
+	   fabs(pu_pdg->at(ipart)) == 12   ||
+	   fabs(pu_pdg->at(ipart)) == 14   ||
+	   fabs(pu_pdg->at(ipart)) == 16   ||
+	   fabs(pu_pdg->at(ipart)) == 22   ||
+	   fabs(pu_pdg->at(ipart)) == 111  ||
+	   fabs(pu_pdg->at(ipart)) == 113  ||
+	   fabs(pu_pdg->at(ipart)) == 130  ||
+	   fabs(pu_pdg->at(ipart)) == 221  ||
+	   fabs(pu_pdg->at(ipart)) == 310  ||
+	   fabs(pu_pdg->at(ipart)) == 331  ||
+	   fabs(pu_pdg->at(ipart)) == 2112 ||
+	   fabs(pu_pdg->at(ipart)) > 3000  ) continue;
 
-	// curvature and helix radius:
-	double c = gen_charge*0.003*mMagneticField/gen_pt;
-	double R = gen_pt/(0.003*mMagneticField);
+      double gen_charge = TMath::Sign(1., (Double_t) pu_pdg->at(ipart));
+
+      double gen_pt  = sqrt(pu_px->at(ipart)*pu_px->at(ipart)+pu_py->at(ipart)*pu_py->at(ipart));
+      double gen_phi = atan2(pu_py->at(ipart),pu_px->at(ipart));
+      //if (pu_phi<0.)
+      //pu_phi += TMath::TwoPi();
+      double gen_theta = atan2(gen_pt,pu_pz->at(ipart));
+      double gen_eta = -log(tan(0.5*gen_theta));
+
+      if ( gen_pt < 2. ) continue;
+
+      // curvature and helix radius:
+      double c = gen_charge*0.003*mMagneticField/gen_pt;
+      double R = gen_pt/(0.003*mMagneticField);
 	  
-	// helix center:
-	double x0 = gen_vx->at(ipart) - gen_charge*R*gen_py->at(ipart)/gen_pt;
-	double y0 = gen_vy->at(ipart) + gen_charge*R*gen_px->at(ipart)/gen_pt;
+      // helix center:
+      double x0 = pu_vx->at(ipart) - gen_charge*R*pu_py->at(ipart)/gen_pt;
+      double y0 = pu_vy->at(ipart) + gen_charge*R*pu_px->at(ipart)/gen_pt;
 
-	// transverse and longitudinal impact parameters:
-	double gen_d0 = gen_charge*(sqrt(x0*x0+y0*y0)-R);
-	double gen_z0 = gen_vz->at(ipart) - 2./c*gen_pz->at(ipart)/gen_pt*
-	  asin(0.5*c*sqrt((gen_vx->at(ipart)*gen_vx->at(ipart)+
-			   gen_vy->at(ipart)*gen_vy->at(ipart)-gen_d0*gen_d0)/(1+c*gen_d0)));
+      // transverse and longitudinal impact parameters:
+      double gen_d0 = gen_charge*(sqrt(x0*x0+y0*y0)-R);
+      double diff = pu_vx->at(ipart)*pu_vx->at(ipart)+pu_vy->at(ipart)*pu_vy->at(ipart)-gen_d0*gen_d0;
+      if ( diff < 0. ) diff = 0.;
+      double gen_z0 = pu_vz->at(ipart) - 2./c*pu_pz->at(ipart)/gen_pt*asin(0.5*c*sqrt(diff));
 
 
-	// --- Print out the generated particles: 
-	std::cout << "  " << ipart << "  -  ID = " << gen_pdg->at(ipart)
+      // --- Print out the generated particles:
+      if ( verboseLevel == 2 )
+ 	std::cout << "  " << nstable << "  -  ID = " << pu_pdg->at(ipart)
 		  << "  pt = "  << gen_pt
 		  << "  d0 = "  << gen_d0
 		  << "  phi = " << gen_phi
@@ -804,16 +968,53 @@ int main(int argc, char* argv[]) {
 		  << std::endl; 
 
 
-      } // ipart loop
-
-
-
-      //  --- Printout the fitted tracks:
-      cout << " Fitted tracks (no duplicate removal):" << endl;
+      // --- Try to match the particle with the fitted tracks
       for ( std::vector<Track*>::iterator itrk=tracks.begin(); itrk!=tracks.end(); ++itrk ){
+      
+	double delta_phi =  (*itrk)->getPhi0() - gen_phi;
+	if ( fabs(delta_phi)>TMath::Pi() )
+	  delta_phi = TMath::TwoPi() - fabs(delta_phi);
+	double delta_eta = (*itrk)->getEta0() - gen_eta;
+      	
+	double delta_R = sqrt(delta_phi*delta_phi+delta_eta*delta_eta);
+      
+	if ( delta_R < 0.05 ) {
 
-	double pt = 0.003*mMagneticField/(*itrk)->getCurve();
+	  GenPart_t tmpPart;
+	  tmpPart.c   = c;
+	  tmpPart.pt  = gen_pt;
+	  tmpPart.phi = gen_phi;
+	  tmpPart.d0  = gen_d0;
+	  tmpPart.eta = gen_eta;
+	  tmpPart.z0  = gen_z0;
 
+	  int index = std::distance(tracks.begin(),itrk);
+	  matched_gen[index].insert(tmpPart);
+
+	}
+
+      }
+
+      ++nstable;
+
+    } // ipart loop
+
+
+    // =============================================================================================
+    //  Printout the fitted tracks:
+    // =============================================================================================
+
+    h_Ntrks->Fill(tracks.size());
+
+    if ( tracks.size() > 0 && verboseLevel > 0 )
+      cout << " Fitted tracks (no duplicate removal):" << endl;
+    for ( std::vector<Track*>::iterator itrk=tracks.begin(); itrk!=tracks.end(); ++itrk ){
+
+      double pt = 0.003*mMagneticField/fabs((*itrk)->getCurve());
+
+      int index = std::distance(tracks.begin(),itrk);
+
+      if ( verboseLevel > 0 ){
 	cout << "  "
 	     << std::distance(tracks.begin(),itrk)
 	     << "  -  c = " << (*itrk)->getCurve()
@@ -823,22 +1024,49 @@ int main(int argc, char* argv[]) {
 	     << "  z0 = "  << (*itrk)->getZ0()
 	     << endl;
 
-      } // itrk loop
+	if ( matched_gen[index].size() == 0 )
+	  cout << "        No matching gen particle! " << endl; 
+	else
+	  for ( std::set<GenPart_t,GenPart_compare>::iterator ipart = matched_gen[index].begin();
+		ipart != matched_gen[index].end(); ++ipart )
+	    cout << "        c = " << ipart->c
+		 << "  pt = "  << ipart->pt 
+		 << "  phi = " << ipart->phi
+		 << "  eta = " << ipart->eta
+		 << "  z0 = "  << ipart->z0  
+		 << "  <--  matching gen particle"
+		 << std::endl;
 
-    } // if ( verboseLevel == 3 )
+      } // if ( verboseLevel > 0 )
+
+      h_trk_c  ->Fill((*itrk)->getCurve());
+      h_trk_pt ->Fill(pt);
+      h_trk_phi->Fill((*itrk)->getPhi0());
+      h_trk_eta->Fill((*itrk)->getEta0());
+      h_trk_z0 ->Fill((*itrk)->getZ0());
+
+      if ( matched_gen[index].size()>0 ) {
+	h_res_pt_rel->Fill((pt-matched_gen[index].begin()->pt)/matched_gen[index].begin()->pt);
+	h_res_phi   ->Fill((*itrk)->getPhi0()-matched_gen[index].begin()->phi);
+	h_res_eta   ->Fill((*itrk)->getEta0()-matched_gen[index].begin()->eta);
+	h_res_z0    ->Fill((*itrk)->getZ0()-matched_gen[index].begin()->z0);
+      }      
+
     
+    } // itrk loop
+
+
+
     // --- Clean-up the heap:
     for ( std::vector<Track*>::iterator itrk=tracks.begin(); itrk!=tracks.end(); ++itrk )
       delete *itrk;
     tracks.clear();
 
-
   } // ientry loop
 
 
-
   // --- Save histograms:
-  TFile f("histos.root","recreate");
+  TFile f("RetinaStandalone_histos.root","recreate");
 
   h_Nstubs_tot->Write();  
   h_Nstubs_tot_PR->Write();  
@@ -851,6 +1079,25 @@ int main(int argc, char* argv[]) {
     h_max_RZ1[ihist]->Write();
     h_max_RZ2[ihist]->Write();
   }
+  h_Ntrks  ->Write();
+  h_trk_c  ->Write();
+  h_trk_pt ->Write();
+  h_trk_phi->Write();
+  h_trk_eta->Write();
+  h_trk_z0 ->Write();
+
+  h_gen_pdg  ->Write();
+  h_gen_pt   ->Write();
+  h_gen_d0   ->Write();
+  h_gen_phi  ->Write();
+  h_gen_eta  ->Write();
+  h_gen_theta->Write();
+  h_gen_z0   ->Write();
+
+  h_res_pt_rel->Write();
+  h_res_phi   ->Write();
+  h_res_eta   ->Write();
+  h_res_z0    ->Write();
 
   f.Close();
 
