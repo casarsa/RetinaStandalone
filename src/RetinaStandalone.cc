@@ -40,14 +40,24 @@ void retina_initialize(std::map <const char*,double> *config);
 // --- Retina configuration parameters:
 std::map <const char*,double> config[3];
 
+// For -pi < phi < pi
 const double rot_angle[8] = {  0.39269908169872414,   //  pi/8
 			      -0.39269908169872414,   // -pi/8
 			      -1.17809724509617242,   // -3/8 pi
 			      -1.96349540849362070,   // -5/8 pi
-			      -2.74889357189106898,   // -7/8 pi
-			      -3.53429173528851726,   // -9/8 pi
-			      -4.31968989868596509,   // -11/8 pi
-			      -5.10508806208341426 }; // -13/8 pi
+			       3.53429173528851726,   //  9/8 pi
+			       2.74889357189106898,   //  7/8 pi
+			       1.96349540849362070,   //  5/8 pi
+			       1.17809724509617242 }; //  3/8 pi
+// For 0 < phi < 2 pi
+//const double rot_angle[8] = {  0.39269908169872414,   //  pi/8
+//			      -0.39269908169872414,   // -pi/8
+//			      -1.17809724509617242,   // -3/8 pi
+//			      -1.96349540849362070,   // -5/8 pi
+//			      -2.74889357189106898,   // -7/8 pi
+//			      -3.53429173528851726,   // -9/8 pi
+//			      -4.31968989868596509,   // -11/8 pi
+//			      -5.10508806208341426 }; // -13/8 pi
 
 const double mMagneticField = 3.8;
 
@@ -78,6 +88,11 @@ TH1F * h_gen_phi   = new TH1F("h_gen_phi","gen #phi;#phi^{gen} [rad]", 100,-TMat
 TH1F * h_gen_eta   = new TH1F("h_gen_eta","gen #eta;#eta^{gen}", 100,-4.,4.);
 TH1F * h_gen_theta = new TH1F("h_gen_theta","gen #theta;#theta^{gen}", 100,0.,TMath::Pi());
 TH1F * h_gen_z0    = new TH1F("h_gen_z0","gen z_{0};z_{0}^{gen} [cm]", 100, -20.,20.);
+
+TH1F * h_wxy_1 = new TH1F("h_wxy_1","XY-1 fit weight", 100, 0.,20.);
+TH1F * h_wxy_2 = new TH1F("h_wxy_2","XY-2 fit weight", 100, 0.,20.);
+TH1F * h_wrz_1 = new TH1F("h_wrz_1","RZ-1 fit weight", 100, 0.,20.);
+TH1F * h_wrz_2 = new TH1F("h_wrz_2","RZ-2 fit weight", 100, 0.,20.);
 
 TH1F * h_res_pt_rel = new TH1F("h_res_pt_rel","p_{T} resolution;(p_{T}^{fit}-p_{T}^{gen})/p_{T}^{gen}", 100,-1.,1.);
 TH1F * h_res_phi    = new TH1F("h_res_phi","#phi resolution;#phi^{fit}-#phi^{gen} [rad]", 100,-0.05,0.05);
@@ -132,14 +147,15 @@ int main(int argc, char* argv[]) {
   // --- Book the histogram arrays:
   for (int ihist=0; ihist<3; ++ihist){
     TString hname = Form("h_max_XY1_%d",ihist);
-    h_max_XY1[ihist] = new TH2F(hname.Data(),"XY-1 maxima;x_{-};x_{+}",100,-0.05,0.05,100,-0.05,0.05);
+    h_max_XY1[ihist] = new TH2F(hname.Data(),"XY-1 maxima;x_{+};x_{-}",100,-0.1,0.1,100,-0.1,0.1);
     hname = Form("h_max_XY2_%d",ihist);
-    h_max_XY2[ihist] = new TH2F(hname.Data(),"XY-2 maxima;x_{-};x_{+}",100,-0.05,0.05,100,-0.05,0.05);
+    h_max_XY2[ihist] = new TH2F(hname.Data(),"XY-2 maxima;x_{+};x_{-}",100,-0.1,0.1,100,-0.1,0.1);
     hname = Form("h_max_RZ1_%d",ihist);
-    h_max_RZ1[ihist] = new TH2F(hname.Data(),"RZ-1 maxima;x_{-};x_{+}",100,-20.,240.,100,-60.,180);
+    h_max_RZ1[ihist] = new TH2F(hname.Data(),"RZ-1 maxima;x_{+};x_{-}",100,-20.,420.,100,-10.,260);
     hname = Form("h_max_RZ2_%d",ihist);
-    h_max_RZ2[ihist] = new TH2F(hname.Data(),"RZ-2 maxima;x_{-};x_{+}",100,-20.,240.,100,-60.,180);
+    h_max_RZ2[ihist] = new TH2F(hname.Data(),"RZ-2 maxima;x_{+};x_{-}",100,-20.,420.,100,-10.,260.);
   }
+
 
   // =============================================================================================
   //  Get the trees from the root files
@@ -259,7 +275,15 @@ int main(int argc, char* argv[]) {
   n_events = std::min(m_L1TT->GetEntries(),n_events);
   for (long long int ientry=0; ientry<n_events; ientry++) {
     
+    m_L1TT->GetEntry(ientry);
+    m_PATT->GetEntry(ientry);
+    m_MC->GetEntry(ientry);
+
     int event_counter = ientry;
+
+
+    // --- Skip events with no roads:
+    if ( n_patterns == 0 ) continue;
 
     if ( ientry % 1000 == 0 )
       cout << "*** Processing event " << ientry << "/" << n_events << endl;
@@ -268,10 +292,6 @@ int main(int argc, char* argv[]) {
       std::cout << "Event = " <<  ientry 
 		<< " ----------------------------------------------------------------------" 
 		<< std::endl;
-
-    m_L1TT->GetEntry(ientry);
-    m_PATT->GetEntry(ientry);
-    m_MC->GetEntry(ientry);
 
 
     // --- Get the stubs per road and trigger tower:
@@ -463,6 +483,7 @@ int main(int argc, char* argv[]) {
       for (unsigned int imax=0; imax<maximaXY_step1.size(); ++imax){
 
 	h_max_XY1[trigTow_type]->Fill( maximaXY_step1[imax].p, maximaXY_step1[imax].q);
+	h_wxy_1->Fill(maximaXY_step1[imax].w);
 
 	// --- Retina setup:
 	double pmin_step2 = maximaXY_step1[imax].p - config[trigTow_type]["xy_zoom_step2"]*pstep_step1;
@@ -535,6 +556,7 @@ int main(int argc, char* argv[]) {
 	for (unsigned int itrk=0; itrk<maximaXY_step2.size(); ++itrk){
 
 	  h_max_XY2[trigTow_type]->Fill( maximaXY_step2[itrk].p, maximaXY_step2[itrk].q);
+	  h_wxy_2->Fill(maximaXY_step2[itrk].w);
 
 	  // --- Invert the X+-X- transformation:
 	  double p = 0.5*(y1 - y0)/maximaXY_step2[itrk].q;
@@ -588,6 +610,7 @@ int main(int argc, char* argv[]) {
 	  if ( phi>TMath::Pi() )
 	    phi -= TMath::TwoPi();
       
+
 	  // =========================================================================
 	  //  RZ fit
 	  // =========================================================================
@@ -682,6 +705,7 @@ int main(int argc, char* argv[]) {
 	  for (unsigned int imax_RZ=0; imax_RZ<maximaRZ_step1.size(); ++imax_RZ){
 	    
 	    h_max_RZ1[trigTow_type]->Fill( maximaRZ_step1[imax_RZ].p, maximaRZ_step1[imax_RZ].q);
+	    h_wrz_1->Fill(maximaRZ_step1[imax_RZ].w);
 
 	    double pmin_step2 = maximaRZ_step1[imax_RZ].p - config[trigTow_type]["rz_zoom_step2"]*pstep_step1;
 	    double pmax_step2 = maximaRZ_step1[imax_RZ].p + config[trigTow_type]["rz_zoom_step2"]*pstep_step1;
@@ -734,7 +758,7 @@ int main(int argc, char* argv[]) {
 	    pqPoint bestpqRZ_step2 = retinaRZ_step2.getBestPQ();
 
 	    h_max_RZ2[trigTow_type]->Fill(bestpqRZ_step2.p,bestpqRZ_step2.q);
-
+	    h_wrz_2->Fill(bestpqRZ_step2.w);
 
 	    // --- If no RZ maximum is found, skip the road:
 	    if ( bestpqRZ_step2.w == -1. ) {
@@ -852,11 +876,11 @@ int main(int argc, char* argv[]) {
       double R = gen_pt/(0.003*mMagneticField);
     	  
       // helix center:
-      double x0 = gen_vx->at(ipart) - gen_charge*R*gen_py->at(ipart)/gen_pt;
-      double y0 = gen_vy->at(ipart) + gen_charge*R*gen_px->at(ipart)/gen_pt;
+      double x_0 = gen_vx->at(ipart) - gen_charge*R*gen_py->at(ipart)/gen_pt;
+      double y_0 = gen_vy->at(ipart) + gen_charge*R*gen_px->at(ipart)/gen_pt;
     
       // transverse and longitudinal impact parameters:
-      double gen_d0 = gen_charge*(sqrt(x0*x0+y0*y0)-R);
+      double gen_d0 = gen_charge*(sqrt(x_0*x_0+y_0*y_0)-R);
       double diff = gen_vx->at(ipart)*gen_vx->at(ipart)+gen_vy->at(ipart)*gen_vy->at(ipart)-gen_d0*gen_d0;
       if ( diff < 0. ) diff = 0.;
       double gen_z0 = gen_vz->at(ipart) - 2./c*gen_pz->at(ipart)/gen_pt*asin(0.5*c*sqrt(diff));
@@ -947,11 +971,11 @@ int main(int argc, char* argv[]) {
       double R = gen_pt/(0.003*mMagneticField);
 	  
       // helix center:
-      double x0 = pu_vx->at(ipart) - gen_charge*R*pu_py->at(ipart)/gen_pt;
-      double y0 = pu_vy->at(ipart) + gen_charge*R*pu_px->at(ipart)/gen_pt;
+      double x_0 = pu_vx->at(ipart) - gen_charge*R*pu_py->at(ipart)/gen_pt;
+      double y_0 = pu_vy->at(ipart) + gen_charge*R*pu_px->at(ipart)/gen_pt;
 
       // transverse and longitudinal impact parameters:
-      double gen_d0 = gen_charge*(sqrt(x0*x0+y0*y0)-R);
+      double gen_d0 = gen_charge*(sqrt(x_0*x_0+y_0*y_0)-R);
       double diff = pu_vx->at(ipart)*pu_vx->at(ipart)+pu_vy->at(ipart)*pu_vy->at(ipart)-gen_d0*gen_d0;
       if ( diff < 0. ) diff = 0.;
       double gen_z0 = pu_vz->at(ipart) - 2./c*pu_pz->at(ipart)/gen_pt*asin(0.5*c*sqrt(diff));
@@ -1062,7 +1086,7 @@ int main(int argc, char* argv[]) {
       delete *itrk;
     tracks.clear();
 
-  } // ientry loop
+    } // ientry loop
 
 
   // --- Save histograms:
@@ -1093,6 +1117,11 @@ int main(int argc, char* argv[]) {
   h_gen_eta  ->Write();
   h_gen_theta->Write();
   h_gen_z0   ->Write();
+
+  h_wxy_1->Write();
+  h_wxy_2->Write();
+  h_wrz_1->Write();
+  h_wrz_2->Write();
 
   h_res_pt_rel->Write();
   h_res_phi   ->Write();
@@ -1143,10 +1172,10 @@ void retina_initialize(std::map <const char*,double> *config){
   // --- Central trigger tower:
   config[0]["xy_pbins_step1"]     = 40.;
   config[0]["xy_qbins_step1"]     = 40.;
-  config[0]["xy_pmin_step1"]      = -0.05;
+  config[0]["xy_pmin_step1"]      =  0.;
   config[0]["xy_pmax_step1"]      =  0.05;
   config[0]["xy_qmin_step1"]      = -0.05;
-  config[0]["xy_qmax_step1"]      =  0.05;
+  config[0]["xy_qmax_step1"]      =  0.;
   config[0]["xy_threshold_step1"] =  4.5;
   config[0]["xy_sigma1_step1"]    =  0.;
   config[0]["xy_sigma2_step1"]    =  0.;
@@ -1169,12 +1198,12 @@ void retina_initialize(std::map <const char*,double> *config){
   config[0]["xy_sigma7_step2"]    =  0.;
   config[0]["xy_sigma8_step2"]    =  0.;
 
-  config[0]["rz_pbins_step1"]     = 20.;
-  config[0]["rz_qbins_step1"]     = 20.;
-  config[0]["rz_pmin_step1"]      = -20.;
-  config[0]["rz_pmax_step1"]      =  60.;
-  config[0]["rz_qmin_step1"]      = -60.;
-  config[0]["rz_qmax_step1"]      =  60.;
+  config[0]["rz_pbins_step1"]     =  20.;
+  config[0]["rz_qbins_step1"]     =  20.;
+  config[0]["rz_pmin_step1"]      = -15.;
+  config[0]["rz_pmax_step1"]      =  85.;
+  config[0]["rz_qmin_step1"]      =  -2.;
+  config[0]["rz_qmax_step1"]      =  46.;
   config[0]["rz_threshold_step1"] =  4.5;
   config[0]["rz_sigma1_step1"]    =  0.;
   config[0]["rz_sigma2_step1"]    =  0.;
@@ -1198,40 +1227,40 @@ void retina_initialize(std::map <const char*,double> *config){
   config[0]["rz_sigma8_step2"]    =  0.;
 
   // --- Hybrid trigger tower:
-  config[1]["xy_pbins_step1"]     = 40.;
-  config[1]["xy_qbins_step1"]     = 40.;
-  config[1]["xy_pmin_step1"]      = -0.05;
-  config[1]["xy_pmax_step1"]      =  0.05;
-  config[1]["xy_qmin_step1"]      = -0.05;
-  config[1]["xy_qmax_step1"]      =  0.05;
-  config[1]["xy_threshold_step1"] =  4.;
-  config[1]["xy_sigma1_step1"]    =  0.;
-  config[1]["xy_sigma2_step1"]    =  0.;
-  config[1]["xy_sigma3_step1"]    =  0.;
-  config[1]["xy_sigma4_step1"]    =  0.;
-  config[1]["xy_sigma5_step1"]    =  0.;
-  config[1]["xy_sigma6_step1"]    =  0.;
-  config[1]["xy_sigma7_step1"]    =  0.;
-  config[1]["xy_sigma8_step1"]    =  0.;
-  config[1]["xy_pbins_step2"]     = 100.;
-  config[1]["xy_qbins_step2"]     = 100.;
-  config[1]["xy_zoom_step2"]      = 1.;
-  config[1]["xy_threshold_step2"] =  4.;
-  config[1]["xy_sigma1_step2"]    =  0.;
-  config[1]["xy_sigma2_step2"]    =  0.;
-  config[1]["xy_sigma3_step2"]    =  0.;
-  config[1]["xy_sigma4_step2"]    =  0.;
-  config[1]["xy_sigma5_step2"]    =  0.;
-  config[1]["xy_sigma6_step2"]    =  0.;
-  config[1]["xy_sigma7_step2"]    =  0.;
-  config[1]["xy_sigma8_step2"]    =  0.;
+  config[1]["xy_pbins_step1"]     = config[0]["xy_pbins_step1"];
+  config[1]["xy_qbins_step1"]     = config[0]["xy_qbins_step1"];
+  config[1]["xy_pmin_step1"]      = config[0]["xy_pmin_step1"];
+  config[1]["xy_pmax_step1"]      = config[0]["xy_pmax_step1"];
+  config[1]["xy_qmin_step1"]      = config[0]["xy_qmin_step1"];
+  config[1]["xy_qmax_step1"]      = config[0]["xy_qmax_step1"];
+  config[1]["xy_threshold_step1"] = config[0]["xy_threshold_step1"];
+  config[1]["xy_sigma1_step1"]    = config[0]["xy_sigma1_step1"];
+  config[1]["xy_sigma2_step1"]    = config[0]["xy_sigma2_step1"];
+  config[1]["xy_sigma3_step1"]    = config[0]["xy_sigma3_step1"];
+  config[1]["xy_sigma4_step1"]    = config[0]["xy_sigma4_step1"];
+  config[1]["xy_sigma5_step1"]    = config[0]["xy_sigma5_step1"];
+  config[1]["xy_sigma6_step1"]    = config[0]["xy_sigma6_step1"];
+  config[1]["xy_sigma7_step1"]    = config[0]["xy_sigma7_step1"];
+  config[1]["xy_sigma8_step1"]    = config[0]["xy_sigma8_step1"];
+  config[1]["xy_pbins_step2"]     = config[0]["xy_pbins_step2"];
+  config[1]["xy_qbins_step2"]     = config[0]["xy_qbins_step2"];
+  config[1]["xy_zoom_step2"]      = config[0]["xy_zoom_step2"];
+  config[1]["xy_threshold_step2"] = config[0]["xy_threshold_step2"];
+  config[1]["xy_sigma1_step2"]    = config[0]["xy_sigma1_step2"];
+  config[1]["xy_sigma2_step2"]    = config[0]["xy_sigma2_step2"];
+  config[1]["xy_sigma3_step2"]    = config[0]["xy_sigma3_step2"];
+  config[1]["xy_sigma4_step2"]    = config[0]["xy_sigma4_step2"];
+  config[1]["xy_sigma5_step2"]    = config[0]["xy_sigma5_step2"];
+  config[1]["xy_sigma6_step2"]    = config[0]["xy_sigma6_step2"];
+  config[1]["xy_sigma7_step2"]    = config[0]["xy_sigma7_step2"];
+  config[1]["xy_sigma8_step2"]    = config[0]["xy_sigma8_step2"];
 
-  config[1]["rz_pbins_step1"]     = 20.;
-  config[1]["rz_qbins_step1"]     = 20.;
-  config[1]["rz_pmin_step1"]      = 40.;
-  config[1]["rz_pmax_step1"]      = 140.;
-  config[1]["rz_qmin_step1"]      = 0.;
-  config[1]["rz_qmax_step1"]      = 120.;
+  config[1]["rz_pbins_step1"]     =  20.;
+  config[1]["rz_qbins_step1"]     =  20.;
+  config[1]["rz_pmin_step1"]      =  35.;
+  config[1]["rz_pmax_step1"]      = 170.;
+  config[1]["rz_qmin_step1"]      =  30.;
+  config[1]["rz_qmax_step1"]      = 105.;
   config[1]["rz_threshold_step1"] =  4.;
   config[1]["rz_sigma1_step1"]    =  0.;
   config[1]["rz_sigma2_step1"]    =  0.;
@@ -1255,40 +1284,40 @@ void retina_initialize(std::map <const char*,double> *config){
   config[1]["rz_sigma8_step2"]    =  0.;
 
   // --- Forward trigger tower:
-  config[2]["xy_pbins_step1"]     = 40.;
-  config[2]["xy_qbins_step1"]     = 40.;
-  config[2]["xy_pmin_step1"]      = -0.05;
-  config[2]["xy_pmax_step1"]      =  0.05;
-  config[2]["xy_qmin_step1"]      = -0.05;
-  config[2]["xy_qmax_step1"]      =  0.05;
-  config[2]["xy_threshold_step1"] =  4.;
-  config[2]["xy_sigma1_step1"]    =  0.;
-  config[2]["xy_sigma2_step1"]    =  0.;
-  config[2]["xy_sigma3_step1"]    =  0.;
-  config[2]["xy_sigma4_step1"]    =  0.;
-  config[2]["xy_sigma5_step1"]    =  0.;
-  config[2]["xy_sigma6_step1"]    =  0.;
-  config[2]["xy_sigma7_step1"]    =  0.;
-  config[2]["xy_sigma8_step1"]    =  0.;
-  config[2]["xy_pbins_step2"]     = 100.;
-  config[2]["xy_qbins_step2"]     = 100.;
-  config[2]["xy_zoom_step2"]      = 1.;
-  config[2]["xy_threshold_step2"] =  4.;
-  config[2]["xy_sigma1_step2"]    =  0.;
-  config[2]["xy_sigma2_step2"]    =  0.;
-  config[2]["xy_sigma3_step2"]    =  0.;
-  config[2]["xy_sigma4_step2"]    =  0.;
-  config[2]["xy_sigma5_step2"]    =  0.;
-  config[2]["xy_sigma6_step2"]    =  0.;
-  config[2]["xy_sigma7_step2"]    =  0.;
-  config[2]["xy_sigma8_step2"]    =  0.;
+  config[2]["xy_pbins_step1"]     = config[0]["xy_pbins_step1"];
+  config[2]["xy_qbins_step1"]     = config[0]["xy_qbins_step1"];
+  config[2]["xy_pmin_step1"]      = config[0]["xy_pmin_step1"];
+  config[2]["xy_pmax_step1"]      = config[0]["xy_pmax_step1"];
+  config[2]["xy_qmin_step1"]      = config[0]["xy_qmin_step1"];
+  config[2]["xy_qmax_step1"]      = config[0]["xy_qmax_step1"];
+  config[2]["xy_threshold_step1"] = config[0]["xy_threshold_step1"];
+  config[2]["xy_sigma1_step1"]    = config[0]["xy_sigma1_step1"];
+  config[2]["xy_sigma2_step1"]    = config[0]["xy_sigma2_step1"];
+  config[2]["xy_sigma3_step1"]    = config[0]["xy_sigma3_step1"];
+  config[2]["xy_sigma4_step1"]    = config[0]["xy_sigma4_step1"];
+  config[2]["xy_sigma5_step1"]    = config[0]["xy_sigma5_step1"];
+  config[2]["xy_sigma6_step1"]    = config[0]["xy_sigma6_step1"];
+  config[2]["xy_sigma7_step1"]    = config[0]["xy_sigma7_step1"];
+  config[2]["xy_sigma8_step1"]    = config[0]["xy_sigma8_step1"];
+  config[2]["xy_pbins_step2"]     = config[0]["xy_pbins_step2"];
+  config[2]["xy_qbins_step2"]     = config[0]["xy_qbins_step2"];
+  config[2]["xy_zoom_step2"]      = config[0]["xy_zoom_step2"];
+  config[2]["xy_threshold_step2"] = config[0]["xy_threshold_step2"];
+  config[2]["xy_sigma1_step2"]    = config[0]["xy_sigma1_step2"];
+  config[2]["xy_sigma2_step2"]    = config[0]["xy_sigma2_step2"];
+  config[2]["xy_sigma3_step2"]    = config[0]["xy_sigma3_step2"];
+  config[2]["xy_sigma4_step2"]    = config[0]["xy_sigma4_step2"];
+  config[2]["xy_sigma5_step2"]    = config[0]["xy_sigma5_step2"];
+  config[2]["xy_sigma6_step2"]    = config[0]["xy_sigma6_step2"];
+  config[2]["xy_sigma7_step2"]    = config[0]["xy_sigma7_step2"];
+  config[2]["xy_sigma8_step2"]    = config[0]["xy_sigma8_step2"];
 
-  config[2]["rz_pbins_step1"]     = 20.;
-  config[2]["rz_qbins_step1"]     = 20.;
-  config[2]["rz_pmin_step1"]      = 140.;
-  config[2]["rz_pmax_step1"]      = 240.;
-  config[2]["rz_qmin_step1"]      = 80.;
-  config[2]["rz_qmax_step1"]      = 180.;
+  config[2]["rz_pbins_step1"]     =  40.;
+  config[2]["rz_qbins_step1"]     =  40.;
+  config[2]["rz_pmin_step1"]      = 100.;
+  config[2]["rz_pmax_step1"]      = 410.;
+  config[2]["rz_qmin_step1"]      =  75.;
+  config[2]["rz_qmax_step1"]      = 260.;
   config[2]["rz_threshold_step1"] =  4.;
   config[2]["rz_sigma1_step1"]    =  1.5;
   config[2]["rz_sigma2_step1"]    =  1.5;
