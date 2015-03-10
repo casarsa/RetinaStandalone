@@ -72,7 +72,7 @@ class Retina{
   ~Retina();
 
   void fillGrid();
-  void dumpGrid(int eventNum=0,int step=1,int imax=0);
+  void dumpGrid(int eventNum=0,int step=1,int imax=0,int iscan=0);
   void findMaxima();
   void printMaxima();
   vector <pqPoint> getMaxima();

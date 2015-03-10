@@ -112,7 +112,7 @@ double Retina::getResponseXpXm(double x_plus, double x_minus) {
 }
 
 
-void Retina::dumpGrid(int eventNum, int step, int imax) {
+void Retina::dumpGrid(int eventNum, int step, int imax, int iscan) {
 
   TH2D *pq_h = new TH2D("pq_h", "x_{+}-x_{-} grid;x_{+};x_{-}", pbins, pmin, pmax, qbins, qmin, qmax);
   for (unsigned int i = 0; i < pbins; i++) {
@@ -132,7 +132,7 @@ void Retina::dumpGrid(int eventNum, int step, int imax) {
   pq_h->Draw(draw_s.c_str());
   string fit_view = "XY";
   if (view == RZ) fit_view = "RZ";
-  c->SaveAs(Form("PQgrid_%d_%s_%d-%d.png",eventNum,fit_view.c_str(),step,imax));
+  c->SaveAs(Form("PQgrid_%d_%s_%d-%d-%d.png",eventNum,fit_view.c_str(),step,imax,iscan));
   //c->SaveAs(Form("PQgrid_%d_%s_%d-%d.root",eventNum,fit_view.c_str(),step,imax));
 
   delete pq_h;
