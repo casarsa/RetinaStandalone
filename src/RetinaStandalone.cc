@@ -436,21 +436,15 @@ int main(int argc, char* argv[]) {
       double y1 =  0.0046296296296296294; // 0.5/108.
 
       // --- Keep only charged stable particles:
-      if ( fabs(gen_pdg->at(ipart)) == 15   ||
-	   fabs(gen_pdg->at(ipart)) == 12   ||
-	   fabs(gen_pdg->at(ipart)) == 14   ||
-	   fabs(gen_pdg->at(ipart)) == 16   ||
-	   fabs(gen_pdg->at(ipart)) == 22   ||
-	   fabs(gen_pdg->at(ipart)) == 111  ||
-	   fabs(gen_pdg->at(ipart)) == 113  ||
-	   fabs(gen_pdg->at(ipart)) == 130  ||
-	   fabs(gen_pdg->at(ipart)) == 221  ||
-	   fabs(gen_pdg->at(ipart)) == 310  ||
-	   fabs(gen_pdg->at(ipart)) == 331  ||
-	   fabs(gen_pdg->at(ipart)) == 2112 ||
-	   fabs(gen_pdg->at(ipart)) > 3000  ) continue;
+      if ( fabs(gen_pdg->at(ipart)) !=   11 &&
+	   fabs(gen_pdg->at(ipart)) !=   13 &&
+	   fabs(gen_pdg->at(ipart)) !=  211 &&
+	   fabs(gen_pdg->at(ipart)) !=  321 &&
+	   fabs(gen_pdg->at(ipart)) != 2212 ) continue;
     
       double gen_charge = TMath::Sign(1., (Double_t) gen_pdg->at(ipart));
+      if ( fabs(gen_pdg->at(ipart)) < 20. )
+	gen_charge *= -1.; 
 
       double gen_pt  = sqrt(gen_px->at(ipart)*gen_px->at(ipart)+gen_py->at(ipart)*gen_py->at(ipart));
       double gen_phi = atan2(gen_py->at(ipart),gen_px->at(ipart));
@@ -459,6 +453,15 @@ int main(int argc, char* argv[]) {
       if ( gen_phi < 0. )
 	phi_sector += 7;
       gen_phi += rot_angle[phi_sector];
+
+      double gen_px_rot = gen_px->at(ipart)*cos(rot_angle[phi_sector])- 
+	                  gen_py->at(ipart)*sin(rot_angle[phi_sector]);
+      double gen_py_rot = gen_px->at(ipart)*sin(rot_angle[phi_sector])+ 
+	                  gen_py->at(ipart)*cos(rot_angle[phi_sector]);
+      double gen_vx_rot = gen_vx->at(ipart)*cos(rot_angle[phi_sector])- 
+	                  gen_vy->at(ipart)*sin(rot_angle[phi_sector]);
+      double gen_vy_rot = gen_vx->at(ipart)*sin(rot_angle[phi_sector])+
+	                  gen_vy->at(ipart)*cos(rot_angle[phi_sector]);
 
       double gen_theta = atan2(gen_pt,gen_pz->at(ipart));
       // 
@@ -472,12 +475,12 @@ int main(int argc, char* argv[]) {
       double R = gen_pt/(0.003*mMagneticField);
 	
       // helix center:
-      double x_0 = gen_vx->at(ipart) - gen_charge*R*gen_py->at(ipart)/gen_pt;
-      double y_0 = gen_vy->at(ipart) + gen_charge*R*gen_px->at(ipart)/gen_pt;
+      double x_0 = gen_vx_rot - gen_charge*R*gen_py_rot/gen_pt;
+      double y_0 = gen_vy_rot + gen_charge*R*gen_px_rot/gen_pt;
     
       // transverse and longitudinal impact parameters:
       double gen_d0 = gen_charge*(sqrt(x_0*x_0+y_0*y_0)-R);
-      double diff = gen_vx->at(ipart)*gen_vx->at(ipart)+gen_vy->at(ipart)*gen_vy->at(ipart)-gen_d0*gen_d0;
+      double diff = gen_vx_rot*gen_vx_rot+gen_vy_rot*gen_vy_rot-gen_d0*gen_d0;
       if ( diff < 0. ) diff = 0.;
       double gen_z0 = gen_vz->at(ipart) - 2./c*gen_pz->at(ipart)/gen_pt*asin(0.5*c*sqrt(diff));
       //
