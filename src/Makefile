@@ -29,7 +29,7 @@ OBJ = $(patsubst %,$(OBJDIR)/%,$(OBJFILES))
 # TARGETS #
 ###########
 
-all: Retina
+all: Retina RetinaPR RetinaPR_phieta RetinaPR_rz 
 
 $(OBJDIR)/%.o: %.cc $(DEPS)
 	$(CXX) -c -o $@ $< $(CXXFLAGS)
@@ -37,9 +37,18 @@ $(OBJDIR)/%.o: %.cc $(DEPS)
 Retina: $(OBJ)
 	$(CXX) -o ../bin/$@ $^  $(LDFLAGS) $(GLIBS)	
 
+RetinaPR: $(OBJDIR)/RetinaPRStandalone.o $(OBJDIR)/Retina.o
+	$(CXX) -o ../bin/$@ $^  $(LDFLAGS) $(GLIBS)	
+
+RetinaPR_phieta: $(OBJDIR)/RetinaPRStandalone_phieta.o $(OBJDIR)/Retina.o
+	$(CXX) -o ../bin/$@ $^  $(LDFLAGS) $(GLIBS)	
+
+RetinaPR_rz: $(OBJDIR)/RetinaPRStandalone_rz.o $(OBJDIR)/Retina.o
+	$(CXX) -o ../bin/$@ $^  $(LDFLAGS) $(GLIBS)	
+
 .PHONY: clean
 
 clean:
-	rm -f $(OBJDIR)/*.o *~ core $(INCLUDEDIR)/*~ 
+	rm -f $(OBJDIR)/*.o *~ core $(INCLUDEDIR)/*~ ../bin/*
 
 

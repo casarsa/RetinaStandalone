@@ -20,6 +20,7 @@ struct Hit_t {
   double y;
   double z;
   double rho;
+  double dphi;
   short layer;
   int id;
 };
@@ -35,7 +36,7 @@ struct pqPoint {
   double w;
 };
 
-enum FitView { XY, RZ };
+enum FitView { XY, RZ, PhiEta };
 
 class Retina{
 
@@ -62,6 +63,7 @@ class Retina{
   void    makeGrid();
   double  getResponsePQ(double p, double q);
   double  getResponseXpXm(double x_plus, double x_minus);
+  double  getResponsePhiEta(double phi, double eta);
   pqPoint findMaximumInterpolated(pqPoint_i point_i, double w);
 
  public:

@@ -24,6 +24,7 @@ Retina::Retina(vector<Hit_t*> hits_, unsigned int pbins_, unsigned int qbins_,
 }
 
 Retina::~Retina() {
+  pqCollection.clear();
 }
 
 
@@ -41,6 +42,7 @@ void Retina::fillGrid() {
       double q_value = qmin + qbinsize * (j + 0.5);
       if (para == 0) Grid[i][j] = getResponsePQ(p_value, q_value);
       if (para == 1) Grid[i][j] = getResponseXpXm(p_value, q_value);
+      if (para == 2) Grid[i][j] = getResponsePhiEta(p_value, q_value);
       //cout << i << " " << j << " p = " << p_value << " q = " << q_value << " w = " << Grid[i][j] << endl;    
     }
   }
@@ -112,6 +114,39 @@ double Retina::getResponseXpXm(double x_plus, double x_minus) {
 }
 
 
+double Retina::getResponsePhiEta(double phi, double eta) {
+
+  double Rij = 0.;
+  unsigned int hits_tot = hits.size();
+
+  for (unsigned int kr = 0; kr < hits_tot; kr++) {
+    
+    double phi_stub   = atan2(hits[kr]->y,hits[kr]->x) + hits[kr]->dphi;
+    double theta_stub = atan2(hits[kr]->rho,hits[kr]->z); 
+    double eta_stub   = -log(tan(0.5*theta_stub));
+
+    //cout << kr << "   " << phi_stub << "  " << eta_stub << endl;
+
+    double delta_phi = phi_stub - phi;
+    double delta_eta = eta_stub - eta;
+    
+    double sigma_local = sigma[0];
+
+    if ( view == RZ && hits[kr]->rho > 60. )
+      sigma_local = sigma[3];
+
+    double S2ijkr = delta_phi*delta_phi + delta_eta*delta_eta; 
+
+    double term = exp(-0.5*S2ijkr/(sigma_local*sigma_local));
+
+    Rij += term;
+  }
+  if (Rij < 1e-6) return 1e-6;
+  else return Rij;
+  
+}
+
+
 void Retina::dumpGrid(int eventNum, int step, int imax, int iscan) {
 
   TH2D *pq_h = new TH2D("pq_h", "x_{+}-x_{-} grid;x_{+};x_{-}", pbins, pmin, pmax, qbins, qmin, qmax);
@@ -119,6 +154,11 @@ void Retina::dumpGrid(int eventNum, int step, int imax, int iscan) {
     for (unsigned int j = 0; j < qbins; j++) {
       pq_h->SetBinContent(i+1, j+1, Grid[i][j]);
     }
+  }
+  if (view == PhiEta){
+    pq_h->SetTitle("#eta-#phi");
+    pq_h->SetXTitle("#phi");
+    pq_h->SetYTitle("#eta");
   }
   gStyle->SetPalette(53);
   gStyle->SetPaintTextFormat("5.2f");
@@ -132,6 +172,7 @@ void Retina::dumpGrid(int eventNum, int step, int imax, int iscan) {
   pq_h->Draw(draw_s.c_str());
   string fit_view = "XY";
   if (view == RZ) fit_view = "RZ";
+  if (view == PhiEta) fit_view = "PhiEta";
   c->SaveAs(Form("PQgrid_%d_%s_%d-%d-%d.png",eventNum,fit_view.c_str(),step,imax,iscan));
   //c->SaveAs(Form("PQgrid_%d_%s_%d-%d.root",eventNum,fit_view.c_str(),step,imax));
 
